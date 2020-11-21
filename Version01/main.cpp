@@ -263,7 +263,6 @@ void* simulationMainThreadFunc(void* arg)
 	return NULL;
 }
 
-
 //	I have decided to go for maximum modularity and readability, at the
 //	cost of some performance.  This may seem contradictory with the
 //	very purpose of multi-threading our application.  I won't deny it.
