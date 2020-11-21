@@ -204,6 +204,8 @@ int main(int argc, const char* argv[])
 
 	//	This will never be executed (the exit point will be in one of the
 	//	call back functions).
+
+    cout << "end." << endl;
 	return 0;
 }
 
@@ -290,7 +292,6 @@ void* comutationThreadFunc(void* arg)
     		for (unsigned int j=0; j<numCols; j++)
     		{
     			unsigned int newState = cellNewState(i, j);
-
     			//	In black and white mode, only alive/dead matters
     			//	Dead is dead in any mode
     			if (colorMode == 0 || newState == 0)
