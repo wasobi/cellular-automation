@@ -39,7 +39,8 @@
 #include <iostream>
 #include <ctime>
 #include <unistd.h>
-#include <sstream.h>
+#include <sstream>
+// #include <pthread.h>
 #include "gl_frontEnd.h"
 
 using namespace std;
@@ -54,12 +55,10 @@ using namespace std;
 typedef struct ThreadInfo
 {
 	//	you probably want these
-	pthread_t threadID;
+	pthread_t id;
 	int index;
-	//
-	//	whatever other input or output data may be needed
-	//
 	unsigned int startRow, endRow;
+    pthread_mutex_t lock;
 } ThreadInfo;
 
 
@@ -74,8 +73,10 @@ void displayGridPane(void);
 void displayStatePane(void);
 void initializeApplication(void);
 void cleanupAndquit(void);
-void* createThreadFunc(void* arg);
-void* comutationThreadFunc(void*);
+void* generateThreadsFunc(void* arg);
+void* computationThreadFunc(void*);
+void createThreadArray (void);
+void distributeRows (void);
 void swapGrids(void);
 unsigned int cellNewState(unsigned int i, unsigned int j);
 
@@ -123,7 +124,7 @@ unsigned int** nextGrid2D;
 //	implementastion, you should always try to run your code with a
 //	non-square grid to spot accidental row-col inversion bugs.
 //	When this is possible, of course (e.g. makes no sense for a chess program).
-unsigned short numRows = 40, numCols = 60;
+unsigned short numRows, numCols;
 
 //	the number of live computation threads (that haven't terminated yet)
 unsigned short numLiveThreads = 0;
@@ -133,11 +134,12 @@ unsigned int rule = GAME_OF_LIFE_RULE;
 
 unsigned int colorMode = 0;
 
+bool run = true;
 unsigned int generation = 0;
 ThreadInfo* info;
-unsigned int sleepTime =  100000;
-unsigned short count; // thread count
-pthread_mutex_lock countLock; // lock prevents other threads from altering the count
+unsigned int sleepTime =  200000;
+unsigned short counter; // thread count
+pthread_mutex_t countLock; // lock prevents other threads from altering the count
 
 
 //------------------------------
@@ -164,17 +166,17 @@ pthread_mutex_lock countLock; // lock prevents other threads from altering the c
 //------------------------------------------------------------------------
 int main(int argc, const char* argv[])
 {
-	cout << "---------------------------------" << endl;
-    cout << "|\tprog06--multi-threading\t|" << endl;
-    cout << "|\tauthor: Sierra Obi\t|\n" << endl;
-    cout << "---------------------------------" << endl;
+    cout << "-----------------------------------------" << endl;
+    cout << "|\tprog06--multi-threading \t|" << endl;
+    cout << "|\tauthor: Sierra Obi\t\t|" << endl;
+    cout << "-----------------------------------------" << endl;
     cout << "running..." << endl;
-	//	argv[1] --> numCols
-	//	argv[2] --> numRows
-	//	argv[3] --> numThreads
-	numRows = 100;
-	numCols = 120;
-	numThreads = 8;
+	//	numRows = argv[1]
+	//	numCols = argv[2]
+	//	numThreads = argv[3]
+	numRows = 500;
+	numCols = 500;
+	numThreads = 350;
 
 	//	This takes care of initializing glut and the GUI.
 	//	You shouldn’t have to touch this
@@ -184,9 +186,9 @@ int main(int argc, const char* argv[])
 	initializeApplication();
 
 	//	Create the main simulation thread
-	pthread_t simulthreadID;
+	pthread_t simulid;
 	//			     pthread_t*  config   thread function         args for function
-	pthread_create(&simulthreadID, NULL,   simulationMainThreadFunc, NULL);
+	pthread_create(&simulid, NULL,   generateThreadsFunc, NULL);
 
 	//	Now we enter the main loop of the program and to a large extend
 	//	"lose control" over its execution.  The callback functions that
@@ -194,18 +196,8 @@ int main(int argc, const char* argv[])
 	//	occurs
 	glutMainLoop();
 
-	//	In fact this code is never reached because we only leave the glut main
-	//	loop through an exit call.
-	//	Free allocated resource before leaving (not absolutely needed, but
-	//	just nicer.  Also, if you crash there, you know something is wrong
-	//	in your code.
-	free(currentGrid2D);
-	free(currentGrid);
-
 	//	This will never be executed (the exit point will be in one of the
 	//	call back functions).
-
-    cout << "end." << endl;
 	return 0;
 }
 
@@ -255,37 +247,40 @@ void initializeApplication(void)
 //	You will need to implement/modify the two functions below
 //---------------------------------------------------------------------
 
-void* createThreadFunc(void* arg)
+void* generateThreadsFunc(void* arg)
 {
 	(void) arg;
-    pthread_mutex_init(&countLock,nullptr);
-    for (int k=0; k<numThreads; k++)
+	pthread_mutex_init(&countLock,nullptr);
+	distributeRows();
+	for (int k = 0; k < numThreads; k++)
 	{
-        info[k].index = k;
-        pthread_mutex_init(&(info[k]),nullptr);
-        pthread_mutex_lock(&(info[k]));
+        pthread_mutex_init(&info[k].lock,nullptr);
+        pthread_mutex_lock(&(info[k].lock)); // acquire
     }
     for (int k = 0; k <numThreads; k++)
 	{
-        pthread_create(&(info[k].threadID),nullptr,comutationThreadFunc,info+k);
+        pthread_create(&(info[k].id),nullptr,computationThreadFunc,info+k);
 	}
-	delete []info;
-    // notice that the threads will continue to run forever
-    // you will join the threads once they have finished processing
-	for (int k=0; k<numThreads; k++)
+	for (int k = 0; k <numThreads; k++)
 	{
-        pthread_join(info[k].threadID,nullptr);
+		pthread_mutex_unlock(&(info[k]).lock);
 	}
-    delete []info;
 	return NULL;
 }
 
-void* comutationThreadFunc(void* arg)
+void* computationThreadFunc(void* arg)
 {
 	ThreadInfo* data = static_cast<ThreadInfo*>(arg);
-    bool go = true;
-    pthread_mutex_lock(&(data->lock));
-    while(go)
+    pthread_mutex_lock(&(data->lock)); // acquire
+    // TEST
+    {
+        stringstream sstr;
+        sstr << "\t+ Thread " << data->index << " launched\n";
+        sstr << "\t `----> lock acquired\n";
+        cout << sstr.str() << flush;
+    }
+	int numRowsProcessed = data->endRow - data->startRow + 1;
+    while(run)
     {
         for (unsigned int i=data->startRow; i<=data->endRow; i++)
     	{
@@ -311,23 +306,82 @@ void* comutationThreadFunc(void* arg)
     			}
     		}
     	}
-        count ++;
-        if (count == numThreads)
+        counter ++;
+        // the last thread will swap grids and
+        if (counter == numRowsProcessed)
         {
-            generation ++;
+			stringstream sstr;
+            // generation ++;
+            // swapGrids();
+            // pthread_mutex_unlock(&(data->lock)); // release
+            // counter = 0;
+
+			// TEST
+			sstr << "\t |\t count is " << counter << "\n";
+
+			counter = 0;
             swapGrids();
-            pthread_mutex_unlock(&(data->lock));
-            count = 0;
+            generation ++;
+			pthread_mutex_unlock(&(data->lock)); // release
+
+			// TEST
+			sstr << "\t | last thread  " << data->index << "\n";
+	        sstr << "\t  `---<- lock released\n";
+			cout << sstr.str() << flush;
         }
         else
         {
             usleep(sleepTime);
-            pthread_mutex_unlock(&countLock);
+            pthread_mutex_unlock(&countLock); // release
         }
+        // TEST
+        // while (counter < numThreads)
+    	// {
+    	// 	stringstream sstr;
+    	// 	sstr << "\t+ - Thread " << data->index << " terminates\n";
+        //     sstr << "\t `--- lock released\n";
+    	// 	cout << sstr.str() << flush;
+    	// }
     }
 	return NULL;
 }
+//
+// void createThreadArray (void)
+// {
+// 	distributeRows();
+// 	for (int k = 0; k < numThreads; k++)
+// 	{
+//         pthread_mutex_init(&info[k].lock,nullptr);
+//         pthread_mutex_lock(&(info[k].lock)); // acquire
+//     }
+//     for (int k = 0; k <numThreads; k++)
+// 	{
+//         pthread_create(&(info[k].id),nullptr,computationThreadFunc,info+k);
+// 	}
+// }
 
+void distributeRows (void)
+{
+	int n = numRows/numThreads;
+    int r = numRows%numThreads;
+    int start = 0;
+    int end = n - 1;
+	info = new ThreadInfo [numThreads];
+	for (int k = 0; k < numThreads; k++)
+	{
+		// assign an index to thread k in order to keep track of it
+        info[k].index = k;
+        // then define the start and end rows
+        if (k < r)
+        {
+            end++;
+        }
+        info[k].startRow = start;
+        info[k].endRow = end;
+        start = end + 1;
+        end = end + n;
+	}
+}
 
 //	This is the function that determines how a cell update its state
 //	based on that of its neighbors.
@@ -509,10 +563,28 @@ unsigned int cellNewState(unsigned int i, unsigned int j)
 
 void cleanupAndquit(void)
 {
-	//	join the threads
+	// notice that the threads will continue to run forever
+    // join the threads once they have finished processing
+	cout << "\t simulation terminated" << endl;
+	run = false;
+	for (int k = 0; k < numThreads; k++)
+	{
+        pthread_join(info[k].id,nullptr);
+        stringstream sstr;
 
-	//	free the grids
+		cout << sstr.str() << flush;
+	}
+	sstr << count << "threads joined\n";
+    delete []info;
+	//	In fact this code is never reached because we only leave the glut main
+	//	loop through an exit call.
+	//	Free allocated resource before leaving (not absolutely needed, but
+	//	just nicer.  Also, if you crash there, you know something is wrong
+	//	in your code.
+	free(currentGrid2D);
+	free(currentGrid);
 
+	cout << "end." << endl;
 	exit(0);
 }
 

@@ -1,6 +1,6 @@
 Cellular_Automaton/
-Documents/
-Scripts/
 .git/
+*.docx
+*.pdf
 *.log
 .DS_Store

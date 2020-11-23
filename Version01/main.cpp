@@ -39,7 +39,6 @@
 #include <iostream>
 #include <ctime>
 #include <unistd.h>
-//
 #include "gl_frontEnd.h"
 
 using namespace std;
@@ -53,7 +52,7 @@ using namespace std;
 
 typedef struct ThreadInfo
 {
-	pthread_t threadID;
+	pthread_t id;
 	int index;
 	unsigned int startRow, endRow;
 
@@ -71,9 +70,10 @@ void displayGridPane(void);
 void displayStatePane(void);
 void initializeApplication(void);
 void cleanupAndquit(void);
-void* simulationMainThreadFunc(void* arg);
-void* comutationThreadFunc(void*);
+void* generateMainThreadFunc(void* arg);
+void* computationThreadFunc(void*);
 void swapGrids(void);
+void distributeRows (void);
 unsigned int cellNewState(unsigned int i, unsigned int j);
 
 
@@ -120,7 +120,7 @@ unsigned int** nextGrid2D;
 //	implementastion, you should always try to run your code with a
 //	non-square grid to spot accidental row-col inversion bugs.
 //	When this is possible, of course (e.g. makes no sense for a chess program).
-unsigned short numRows = 40, numCols = 60;
+unsigned short numRows, numCols;
 
 //	the number of live computation threads (that haven't terminated yet)
 unsigned short numLiveThreads = 0;
@@ -160,10 +160,10 @@ unsigned int sleepTime =  100000;
 //------------------------------------------------------------------------
 int main(int argc, const char* argv[])
 {
-	cout << "---------------------------------" << endl;
+	cout << "-----------------------------------------" << endl;
     cout << "|\tprog06--multi-threading\t|" << endl;
     cout << "|\tauthor: Sierra Obi\t|\n" << endl;
-    cout << "---------------------------------" << endl;
+    cout << "-----------------------------------------" << endl;
     cout << "running..." << endl;
 	//	argv[1] --> numCols
 	//	argv[2] --> numRows
@@ -180,9 +180,9 @@ int main(int argc, const char* argv[])
 	initializeApplication();
 
 	//	Create the main simulation thread
-	pthread_t simulthreadID;
+	pthread_t simulid;
 	//			     pthread_t*  config   thread function         args for function
-	pthread_create(&simulthreadID, NULL,   simulationMainThreadFunc, NULL);
+	pthread_create(&simulid, NULL,   generateMainThreadFunc, NULL);
 
 	//	Now we enter the main loop of the program and to a large extend
 	//	"lose control" over its execution.  The callback functions that
@@ -249,7 +249,7 @@ void initializeApplication(void)
 //	You will need to implement/modify the two functions below
 //---------------------------------------------------------------------
 
-void* simulationMainThreadFunc(void* arg)
+void* generateMainThreadFunc(void* arg)
 {
 	(void) arg;
 	bool keepGoing = true;
@@ -273,44 +273,22 @@ void* simulationMainThreadFunc(void* arg)
 //	heart's content.
 void oneGeneration(void)
 {
-    int n = numRows/numThreads;
-    int r = numRows%numThreads;
-    int start = 0;
-    int end = n - 1;
-	// global ThreadInfo + number of threads
-	info = new ThreadInfo [numThreads];
-	for (int k = 0; k < numThreads; k++)
-	{
-		//	initialize ThreadInfo struct for thread k
-        info[k].index = k;
-        // define the start and end rows
-        if (k < r)
-        {
-            end++;
-        }
-        info[k].startRow = start;
-        info[k].endRow = end;
-        start = end + 1;
-        end = end + n;
-	}
+    distributeRows();
 	//	create the threads
 	for (int k = 0; k < numThreads; k++)
 	{
-		//	create thread k
-        //
-        pthread_create(&(info[k].threadID),nullptr,comutationThreadFunc,info+k);
+        pthread_create(&(info[k].id),nullptr,computationThreadFunc,info+k);
 	}
 	//	wait for threads to finish (join)
 	for (int k = 0; k < numThreads; k++)
 	{
-		//	join thread k;
-        pthread_join(info[k].threadID,nullptr);
+        pthread_join(info[k].id,nullptr);
 	}
 	// finally, free your memory
 	delete []info;
 }
 
-void* comutationThreadFunc(void* arg)
+void* computationThreadFunc(void* arg)
 {
 	//	cast argument to proper type
 	ThreadInfo* data = static_cast<ThreadInfo*>(arg);
@@ -339,15 +317,35 @@ void* comutationThreadFunc(void* arg)
 				//	An old cell remains old until it dies
 				else
 					nextGrid2D[i][j] = currentGrid2D[i][j];
-
 			}
 		}
 	}
-
 	return NULL;
 }
 
-
+void distributeRows (void)
+{
+	int n = numRows/numThreads;
+    int r = numRows%numThreads;
+    int start = 0;
+    int end = n - 1;
+	// global ThreadInfo + number of threads
+	info = new ThreadInfo [numThreads];
+	for (int k = 0; k < numThreads; k++)
+	{
+		//	initialize ThreadInfo struct for thread k
+        info[k].index = k;
+        // define the start and end rows
+        if (k < r)
+        {
+            end++;
+        }
+        info[k].startRow = start;
+        info[k].endRow = end;
+        start = end + 1;
+        end = end + n;
+	}
+}
 
 //	This is the function that determines how a cell update its state
 //	based on that of its neighbors.
