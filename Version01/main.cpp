@@ -74,6 +74,7 @@ void* generateMainThreadFunc(void* arg);
 void* computationThreadFunc(void*);
 void swapGrids(void);
 void distributeRows (void);
+void startSimulation (void);
 unsigned int cellNewState(unsigned int i, unsigned int j);
 
 
@@ -161,24 +162,46 @@ unsigned int sleepTime =  100000;
 int main(int argc, const char* argv[])
 {
 	cout << "-----------------------------------------" << endl;
-    cout << "|\tprog06--multi-threading\t|" << endl;
-    cout << "|\tauthor: Sierra Obi\t|\n" << endl;
+    cout << "|\tprog06--multi-threading \t|" << endl;
+    cout << "|\tauthor: Sierra Obi\t\t|" << endl;
     cout << "-----------------------------------------" << endl;
-    cout << "running..." << endl;
-	//	argv[1] --> numCols
-	//	argv[2] --> numRows
-	//	argv[3] --> numThreads
-	numRows = 100;
-	numCols = 120;
-	numThreads = 8;
+	cout << "running..." << endl;
 
+	if (argc != 4)
+	{
+		cout << "Usage: " << argv[0] << " <number-of-rows> <number-of-cols> <number-of-threads" << endl;
+		exit(1);
+	}
+	else
+	{
+		numRows = atoi(argv[1]);
+		numCols = atoi(argv[2]);
+		numThreads = atoi(argv[3]);
+		if (!(numRows > 5 && numCols > 5 && numThreads >= 0))
+		{
+			cout << "\tError: all arguements must be non-negative and the number of rows" << endl;
+			cout << "\t    columns must be greater than 5." << endl;
+			exit(1);
+		}
+		if (!(numThreads <= numRows))
+		{
+			cout << "\tError: number of threads must be less than the number of rows" << endl;
+			exit(1);
+		}
+	}
 	//	This takes care of initializing glut and the GUI.
 	//	You shouldn’t have to touch this
 	initializeFrontEnd(argc, argv, displayGridPane, displayStatePane);
-
 	//	Now we can do application-level initialization
-	initializeApplication();
+	startSimulation();
+	//	This will never be executed (the exit point will be in one of the
+	//	call back functions).
+	return 0;
+}
 
+void startSimulation (void)
+{
+	initializeApplication();
 	//	Create the main simulation thread
 	pthread_t simulid;
 	//			     pthread_t*  config   thread function         args for function
@@ -197,12 +220,7 @@ int main(int argc, const char* argv[])
 	//	in your code.
 	free(currentGrid2D);
 	free(currentGrid);
-
-	//	This will never be executed (the exit point will be in one of the
-	//	call back functions).
-	return 0;
 }
-
 
 //==================================================================================
 //
@@ -278,11 +296,13 @@ void oneGeneration(void)
 	for (int k = 0; k < numThreads; k++)
 	{
         pthread_create(&(info[k].id),nullptr,computationThreadFunc,info+k);
+		numLiveThreads++;
 	}
 	//	wait for threads to finish (join)
 	for (int k = 0; k < numThreads; k++)
 	{
         pthread_join(info[k].id,nullptr);
+		numThreads--;
 	}
 	// finally, free your memory
 	delete []info;
@@ -527,10 +547,6 @@ unsigned int cellNewState(unsigned int i, unsigned int j)
 
 void cleanupAndquit(void)
 {
-	//	join the threads
-
-	//	free the grids
-
 	exit(0);
 }
 
