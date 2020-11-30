@@ -165,35 +165,32 @@ int main(int argc, const char* argv[])
     cout << "|\tprog06--multi-threading \t|" << endl;
     cout << "|\tauthor: Sierra Obi\t\t|" << endl;
     cout << "-----------------------------------------" << endl;
-	cout << "running..." << endl;
+    cout << "running..." << endl;
 
-	if (argc != 4)
-	{
-		cout << "Usage: " << argv[0] << " <number-of-rows> <number-of-cols> <number-of-threads" << endl;
-		exit(1);
-	}
-	else
+	if (argc == 4)
 	{
 		numRows = atoi(argv[1]);
 		numCols = atoi(argv[2]);
 		numThreads = atoi(argv[3]);
-		if (!(numRows > 5 && numCols > 5 && numThreads >= 0))
+		if (numRows > 5 && numCols > 5 && numThreads >= 0 && numThreads <= numRows)
 		{
-			cout << "\tError: all arguements must be non-negative and the number of rows" << endl;
-			cout << "\t    columns must be greater than 5." << endl;
-			exit(1);
+				// This takes care of initializing glut and the GUI.
+				//	You shouldn’t have to touch this
+				initializeFrontEnd(argc, argv, displayGridPane, displayStatePane);
+				//	Now we can do application-level initialization
+				startSimulation();
 		}
-		if (!(numThreads <= numRows))
+		else
 		{
-			cout << "\tError: number of threads must be less than the number of rows" << endl;
-			exit(1);
+			cout << "\t[ERROR] Input must meet the following conditions:\n\t  -> number of threads must be less than the number of rows\n\t  -> all arguements must be non-negative\n\t  -> the number of rows/columns must be greater than 5" << endl;
+					exit(1);
 		}
 	}
-	//	This takes care of initializing glut and the GUI.
-	//	You shouldn’t have to touch this
-	initializeFrontEnd(argc, argv, displayGridPane, displayStatePane);
-	//	Now we can do application-level initialization
-	startSimulation();
+	else
+	{
+		cout << "Usage: " << argv[0] << " <number-of-rows> <number-of-cols> <number-of-threads" << endl;
+		exit(1);
+	}
 	//	This will never be executed (the exit point will be in one of the
 	//	call back functions).
 	return 0;
@@ -291,7 +288,6 @@ void* generateMainThreadFunc(void* arg)
 //	heart's content.
 void oneGeneration(void)
 {
-	info = new ThreadInfo [numThreads];
     distributeRows();
 	for (int k = 0; k < numThreads; k++)
 	{
@@ -347,6 +343,7 @@ void distributeRows (void)
     int r = numRows%numThreads;
     int start = 0;
     int end = n - 1;
+	info = new ThreadInfo [numThreads];
 	for (int k = 0; k < numThreads; k++)
 	{
 		//	initialize ThreadInfo struct for thread k
