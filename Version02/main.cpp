@@ -75,13 +75,15 @@ typedef struct ThreadInfo
 void displayGridPane(void);
 void displayStatePane(void);
 void initializeApplication(void);
-void cleanupAndquit(void);
+void startSimulation (void);
 void* generateThreadsFunc(void* arg);
 void* computationThreadFunc(void*);
 void createThreadArray (void);
 void distributeRows (void);
+void joinThreads (void);
+void freeGrid (void);
+void cleanupAndquit(void);
 void swapGrids(void);
-void startSimulation (void);
 unsigned int cellNewState(unsigned int i, unsigned int j);
 
 
@@ -384,7 +386,7 @@ void* computationThreadFunc(void* arg)
 			pthread_mutex_lock(&(data->lock)); // acquire my lock
         }
     }
-	// pthread_mutex_destroy(&(data->lock));
+	pthread_mutex_destroy(&(data->lock));
 	return NULL;
 }
 
@@ -587,10 +589,22 @@ unsigned int cellNewState(unsigned int i, unsigned int j)
 
 	return newState;
 }
-
-void cleanupAndquit(void)
+void freeGrid (void)
 {
-	run = false;
+	for (int k = 0; k < numThreads; k++)
+	{
+		pthread_mutex_destroy(&(info[k].lock));
+	}
+	pthread_mutex_destroy(&counterLock);
+    delete []info;
+	delete []currentGrid2D;
+	delete []currentGrid;
+	delete []nextGrid2D;
+	delete []nextGrid;
+}
+
+void joinThreads (void)
+{
 	int count = 0;
 	for (int k = 0; k < numThreads; k++)
 	{
@@ -598,16 +612,6 @@ void cleanupAndquit(void)
 		numLiveThreads--;
 		count ++;
 	}
-	for (int k = 0; k < numThreads; k++)
-	{
-		pthread_mutex_destroy(&(info[k].lock));
-	}
-	pthread_mutex_destroy(&counterLock);
-    delete []info;
-	free(currentGrid2D);
-	free(currentGrid);
-	free(nextGrid2D);
-	free(nextGrid);
 	#if VERSION == RUN_DEBUG
 		stringstream sstr;
 		// notice that the threads will continue to run forever
@@ -616,6 +620,13 @@ void cleanupAndquit(void)
 		sstr << "  " << count << " threads joined\n";
 		cout << sstr.str() << flush;
 	#endif
+}
+
+void cleanupAndquit(void)
+{
+	run = false;
+	joinThreads();
+	freeGrid();
 	cout << "end." << endl;
 	exit(0);
 }

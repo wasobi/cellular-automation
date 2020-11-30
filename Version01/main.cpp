@@ -276,7 +276,7 @@ void* generateMainThreadFunc(void* arg)
 		oneGeneration();
 		generation++;
 		swapGrids();
-		usleep(sleepTime); // slow down - speed up
+		usleep(sleepTime);
 	}
 	return NULL;
 }
@@ -291,20 +291,18 @@ void* generateMainThreadFunc(void* arg)
 //	heart's content.
 void oneGeneration(void)
 {
+	info = new ThreadInfo [numThreads];
     distributeRows();
-	//	create the threads
 	for (int k = 0; k < numThreads; k++)
 	{
         pthread_create(&(info[k].id),nullptr,computationThreadFunc,info+k);
 		numLiveThreads++;
 	}
-	//	wait for threads to finish (join)
 	for (int k = 0; k < numThreads; k++)
 	{
         pthread_join(info[k].id,nullptr);
 		numThreads--;
 	}
-	// finally, free your memory
 	delete []info;
 }
 
@@ -349,8 +347,6 @@ void distributeRows (void)
     int r = numRows%numThreads;
     int start = 0;
     int end = n - 1;
-	// global ThreadInfo + number of threads
-	info = new ThreadInfo [numThreads];
 	for (int k = 0; k < numThreads; k++)
 	{
 		//	initialize ThreadInfo struct for thread k
